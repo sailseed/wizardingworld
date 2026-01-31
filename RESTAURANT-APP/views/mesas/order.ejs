@@ -131,7 +131,7 @@
     </div>
 </div>
 
-<!-- MODAL CIERRE -->
+<!-- MODAL PARA CERRAR CUENTA CON CALCULADORA DE CAMBIO -->
 <div class="modal fade" id="closeModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <form action="/mesas/close/<%= service.id %>" method="POST" class="modal-content">
@@ -139,23 +139,52 @@
                 <h5 class="modal-title">Finalizar Venta</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-4 text-center">
-                <input type="hidden" name="total" value="<%= total %>">
-                <span class="text-muted d-block">Monto a cobrar:</span>
-                <span class="display-4 fw-bold">$<%= total.toFixed(2) %></span>
+            <div class="modal-body p-4">
+                <input type="hidden" name="total" id="totalAmountHidden" value="<%= total %>">
 
-                <div class="mt-4 text-start">
+                <div class="text-center mb-3">
+                    <span class="text-muted d-block">Total a cobrar:</span>
+                    <span class="display-5 fw-bold text-dark">$<%= total.toFixed(2) %></span>
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label fw-bold">Método de Pago:</label>
-                    <select name="payment_method" class="form-select form-select-lg" required>
+                    <select name="payment_method" id="methodSelect" class="form-select form-select-lg" required onchange="toggleCalculator()">
                         <option value="Efectivo">💵 Efectivo</option>
                         <option value="Transferencia">📱 Transferencia</option>
                         <option value="Tarjeta">💳 Tarjeta</option>
                     </select>
                 </div>
+
+                <!-- CALCULADORA DE CAMBIO (Solo visible para Efectivo) -->
+                <div id="calculatorSection" class="bg-light p-3 rounded border shadow-sm">
+                    <div class="row align-items-center mb-3">
+                        <div class="col-6">
+                            <label class="small fw-bold">Recibido:</label>
+                            <div class="h3 mb-0" id="displayRecibido">$0</div>
+                        </div>
+                        <div class="col-6 text-end">
+                            <label class="small fw-bold">Cambio:</label>
+                            <div class="h3 mb-0 text-success fw-bold" id="displayCambio">$0.00</div>
+                        </div>
+                    </div>
+
+                    <!-- TECLADO NUMÉRICO -->
+                    <div class="row g-2">
+                        <% [1,2,3,4,5,6,7,8,9,0].forEach(num => { %>
+                            <div class="col-4">
+                                <button type="button" class="btn btn-outline-dark w-100 py-3 fs-4 fw-bold" onclick="pressKey('<%= num %>')"><%= num %></button>
+                            </div>
+                        <% }) %>
+                        <div class="col-8">
+                            <button type="button" class="btn btn-outline-danger w-100 py-3 fs-4 fw-bold" onclick="clearCalc()">BORRAR</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer border-0">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-                <button type="submit" class="btn btn-success btn-lg px-4">Confirmar</button>
+                <button type="submit" class="btn btn-success btn-lg px-5">Confirmar Pago</button>
             </div>
         </form>
     </div>
@@ -170,6 +199,50 @@
             input.value = current + val;
         }
     }
+</script>
+<script>
+    let amountReceived = "";
+    const totalToPay = parseFloat(document.getElementById('totalAmountHidden').value);
+
+    function toggleCalculator() {
+        const method = document.getElementById('methodSelect').value;
+        const calc = document.getElementById('calculatorSection');
+        if (method === 'Efectivo') {
+            calc.style.display = 'block';
+        } else {
+            calc.style.display = 'none';
+            clearCalc();
+        }
+    }
+
+    function pressKey(num) {
+        amountReceived += num;
+        updateDisplay();
+    }
+
+    function clearCalc() {
+        amountReceived = "";
+        updateDisplay();
+    }
+
+    function updateDisplay() {
+        const recibido = amountReceived === "" ? 0 : parseFloat(amountReceived);
+        document.getElementById('displayRecibido').innerText = "$" + recibido;
+
+        const cambio = recibido - totalToPay;
+        const displayCambio = document.getElementById('displayCambio');
+
+        if (cambio < 0) {
+            displayCambio.innerText = "$0.00";
+            displayCambio.classList.replace('text-success', 'text-muted');
+        } else {
+            displayCambio.innerText = "$" + cambio.toFixed(2);
+            displayCambio.classList.replace('text-muted', 'text-success');
+        }
+    }
+
+    // Ejecutar al cargar para asegurar que el estado inicial sea correcto
+    toggleCalculator();
 </script>
 
 </body>

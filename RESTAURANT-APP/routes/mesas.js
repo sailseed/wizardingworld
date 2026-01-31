@@ -109,4 +109,23 @@ router.post('/close/:serviceId', (req, res) => {
     });
 });
 
+// HISTORIAL DE VENTAS (Cerradas)
+router.get('/historial', (req, res) => {
+    const query = `
+    SELECT servicios.*, mesas.name as mesa_name
+    FROM servicios
+    JOIN mesas ON servicios.mesa_id = mesas.id
+    WHERE servicios.status = 'closed'
+    ORDER BY servicios.id DESC
+    `;
+
+    req.db.all(query, [], (err, rows) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).send("Error al cargar el historial");
+        }
+        res.render('mesas/historial', { history: rows || [] });
+    });
+});
+
 module.exports = router;

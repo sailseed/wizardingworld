@@ -13,16 +13,19 @@
 <body class="bg-light">
     <div class="container mt-4">
         <!-- HEADER & ADD REGULAR TABLE -->
-        <div class="row align-items-center mb-4">
-            <div class="col-md-6"><h1>Mesas y Pedidos</h1></div>
-            <div class="col-md-6 text-end">
-                <form action="/mesas/add" method="POST" class="d-inline-flex border p-2 bg-white rounded shadow-sm">
-                    <input type="text" name="name" class="form-control form-control-sm me-2" placeholder="Nombre Mesa (Ej: 5)" required>
-                    <button class="btn btn-primary btn-sm">Agregar Mesa</button>
-                </form>
-                <a href="/" class="btn btn-outline-secondary btn-sm ms-2">Dashboard</a>
-            </div>
-        </div>
+      <div class="row align-items-center mb-4">
+    <div class="col-md-5"><h1>Mesas y Pedidos</h1></div>
+    <div class="col-md-7 text-end">
+        <!-- BOTÓN DE HISTORIAL -->
+        <a href="/mesas/historial" class="btn btn-warning btn-sm me-2 shadow-sm fw-bold">📜 Historial Ventas</a>
+
+        <form action="/mesas/add" method="POST" class="d-inline-flex border p-2 bg-white rounded shadow-sm">
+            <input type="text" name="name" class="form-control form-control-sm me-2" placeholder="Nombre Mesa" required>
+            <button class="btn btn-primary btn-sm">Agregar Mesa</button>
+        </form>
+        <a href="/" class="btn btn-outline-secondary btn-sm ms-2">Dashboard</a>
+    </div>
+</div>
 
         <!-- GRID -->
         <div class="row g-3">
