@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cierre de Caja</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body class="bg-light container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Módulo de Cierre</h1>
+        <a href="/cierre/logout" class="btn btn-outline-secondary">Volver al Dashboard</a>
+    </div>
+
+    <!-- CONTENEDOR PRINCIPAL QUE SE ACTUALIZA -->
+    <div id="session-update-container">
+        <% if (!activeSession) { %>
+            <div class="card p-5 text-center shadow">
+                <h3>No hay ninguna sesión activa</h3>
+                <form action="/cierre/abrir" method="POST">
+                    <button class="btn btn-success btn-lg mt-3">Abrir Nueva Sesión</button>
+                </form>
+            </div>
+
+            <h4 class="mt-5">Historial de Sesiones</h4>
+            <table class="table table-sm table-striped bg-white shadow-sm">
+                <thead><tr><th>ID</th><th>Inicio</th><th>Fin</th><th>Acción</th></tr></thead>
+                <tbody>
+                    <% history.forEach(h => { %>
+                        <tr><td><%= h.session_code %></td><td><%= h.start_timestamp %></td><td><%= h.end_timestamp %></td><td>
+    <a href="/cierre/reporte/<%= h.id %>" class="btn btn-sm btn-outline-primary">
+        Descargar Excel 📥
+    </a>
+</td></tr>
+                    <% }) %>
+                </tbody>
+            </table>
+
+        <% } else { %>
+            <div class="alert alert-primary d-flex justify-content-between">
+                <span>Sesión Activa: <strong><%= activeSession.session_code %></strong> (Iniciada: <%= activeSession.start_timestamp %>)</span>
+                <span class="badge bg-white text-primary">Actualizando en tiempo real...</span>
+            </div>
+
+            <h4>Movimientos de la Sesión</h4>
+            <table class="table table-bordered bg-white shadow-sm align-middle">
+                <thead class="table-dark">
+                    <tr><th>ID</th><th>Tipo</th><th>Monto</th><th>Info</th><th>Fecha</th></tr>
+                </thead>
+                <tbody>
+                    <%
+                       let subEfectivo = 0, subTrans = 0, subTarj = 0, totalGastos = 0, fondoTotal = 0;
+                       fondos.forEach(f => { fondoTotal += f.amount; %>
+                        <tr><td><%= f.f_code %></td><td><span class="badge bg-info">Fondo</span></td><td>$<%= f.amount.toFixed(2) %></td><td>-</td><td><%= f.timestamp %></td></tr>
+                    <% }); %>
+                    <% ventas.forEach(v => {
+                        if(v.payment_method === 'Efectivo') subEfectivo += v.total;
+                        if(v.payment_method === 'Transferencia') subTrans += v.total;
+                        if(v.payment_method === 'Tarjeta') subTarj += v.total;
+                    %>
+                        <tr><td><%= v.service_code %></td><td><span class="badge bg-success">Venta</span></td><td>$<%= v.total.toFixed(2) %></td><td><%= v.payment_method %></td><td><%= v.timestamp %></td></tr>
+                    <% }); %>
+                    <% gastos.forEach(g => { totalGastos += g.price; %>
+                        <tr><td><%= g.g_code %></td><td><span class="badge bg-danger">Gasto</span></td><td class="text-danger">-$<%= g.price.toFixed(2) %></td><td><%= g.description %></td><td><%= g.timestamp %></td></tr>
+                    <% }); %>
+                </tbody>
+            </table>
+
+<!-- Busca la sección del resumen (list-group) y reemplázala por esta: -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <ul class="list-group shadow-sm">
+            <li class="list-group-item d-flex justify-content-between">Subtotal Efectivo: <span>$<%= subEfectivo.toFixed(2) %></span></li>
+            <li class="list-group-item d-flex justify-content-between">Subtotal Transf: <span>$<%= subTrans.toFixed(2) %></span></li>
+            <li class="list-group-item d-flex justify-content-between">Subtotal Tarjeta: <span>$<%= subTarj.toFixed(2) %></span></li>
+            <li class="list-group-item d-flex justify-content-between bg-light fw-bold">TOTAL INGRESOS: <span>$<%= (subEfectivo + subTrans + subTarj).toFixed(2) %></span></li>
+            <!-- NUEVA LÍNEA DE GASTOS -->
+            <li class="list-group-item d-flex justify-content-between text-danger fw-bold">TOTAL GASTOS: <span>-$<%= totalGastos.toFixed(2) %></span></li>
+        </ul>
+    </div>
+    <div class="col-md-6">
+        <div class="card bg-dark text-white p-3 shadow-sm h-100 d-flex flex-column justify-content-center border-warning border-start border-5">
+            <h5 class="text-muted mb-1">Balance Final</h5>
+            <hr class="border-secondary my-2">
+            <h3 class="text-warning mb-0">EFECTIVO EN CAJA: $<%= (subEfectivo + fondoTotal).toFixed(2) %></h3>
+            <small class="text-muted mt-2">(Ventas Efectivo + Fondo Inicial)</small>
+        </div>
+    </div>
+</div>
+
+            <form action="/cierre/cerrar/<%= activeSession.id %>" method="POST" class="mt-5 mb-5" onsubmit="return confirm('¿Cerrar sesión y exportar reporte?')">
+                <button class="btn btn-danger btn-lg w-100 fw-bold py-3 shadow">CERRAR SESIÓN Y EXPORTAR EXCEL</button>
+            </form>
+        <% } %>
+    </div>
+
+    <!-- SCRIPT DE ACTUALIZACIÓN AUTOMÁTICA -->
+    <script>
+        async function updateCierre() {
+            // No actualizar si hay un mensaje de confirmación abierto
+            const isClosing = document.querySelector('form[action^="/cierre/cerrar"] button:focus');
+
+            try {
+                const response = await fetch('/cierre');
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                const newData = doc.querySelector('#session-update-container').innerHTML;
+                const currentData = document.querySelector('#session-update-container').innerHTML;
+
+                // Solo actualizar si el contenido ha cambiado para no parpadear
+                if (newData !== currentData) {
+                    document.querySelector('#session-update-container').innerHTML = newData;
+                    console.log("Cierre actualizado con nuevos movimientos.");
+                }
+            } catch (err) {
+                console.error("Error actualizando cierre:", err);
+            }
+        }
+
+        // Actualizar cada 10 segundos (en cierre no hace falta tanta frecuencia como en cocina)
+        setInterval(updateCierre, 10000);
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

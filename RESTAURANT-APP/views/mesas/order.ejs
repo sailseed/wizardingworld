@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Servicio: <%= service.mesa_name %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <style>
+        .qty-input { max-width: 60px; font-weight: bold; }
+        .table-order { font-size: 1.1rem; }
+        .btn-xl { padding: 15px 25px; font-size: 1.2rem; }
+        .status-badge { font-size: 0.8rem; padding: 5px 10px; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container mt-3">
+    <!-- CABECERA -->
+    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 <%= service.service_code.startsWith('#R') ? 'border-info' : service.service_code.startsWith('#M') ? 'border-primary' : 'border-warning' %>">
+        <div>
+            <h2 class="mb-0">
+                <%= service.mesa_name %>
+                <% if(service.domicilio) { %> <small class="text-muted">- <%= service.domicilio %></small> <% } %>
+            </h2>
+            <span class="badge bg-dark fs-6"><%= service.service_code %></span>
+        </div>
+
+        <% if (!service.service_code.startsWith('#M')) { %>
+            <form action="/mesas/service/<%= service.id %>/toggle-pagado" method="POST" class="bg-light p-2 rounded border">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="pagado" onChange="this.form.submit()" <%= service.pagado ? 'checked' : '' %>>
+                    <label class="form-check-label fw-bold">PAGADO POR ADELANTADO</label>
+                </div>
+            </form>
+        <% } %>
+
+        <a href="/mesas" class="btn btn-outline-secondary">Volver</a>
+    </div>
+
+    <!-- ALERTA DE PAGO -->
+    <% if (service.pagado) { %>
+        <div class="alert alert-success text-center fw-bold shadow-sm">
+            💰 ESTE PEDIDO YA ESTÁ PAGADO
+        </div>
+    <% } %>
+
+    <!-- AGREGAR PRODUCTO -->
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">Agregar Producto</div>
+        <div class="card-body">
+            <form action="/mesas/add-item/<%= service.id %>" method="POST" class="row g-3 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small fw-bold">Producto</label>
+                    <select name="menu_item_id" class="form-select form-select-lg" required>
+                        <option value="">Seleccionar...</option>
+                        <% menu.forEach(m => { %>
+                            <option value="<%= m.id %>">[<%= m.code %>] <%= m.name %> - $<%= m.price %></option>
+                        <% }) %>
+                    </select>
+                </div>
+
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-bold">Cantidad</label>
+                    <div class="input-group input-group-lg">
+                        <button type="button" class="btn btn-outline-secondary" onclick="changeQty(-1)">-</button>
+                        <input type="number" name="quantity" id="qtyInput" class="form-control text-center qty-input" value="1" min="1" readonly>
+                        <button type="button" class="btn btn-outline-secondary" onclick="changeQty(1)">+</button>
+                    </div>
+                </div>
+
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-bold">Comentario</label>
+                    <input type="text" name="comment" class="form-control form-control-lg" placeholder="Ej: Sin cebolla">
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <button class="btn btn-primary btn-lg w-100">Agregar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TABLA DE PRODUCTOS -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="table-responsive">
+            <table class="table table-hover table-order mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Cant.</th>
+                        <th>Producto</th>
+                        <th>Subtotal</th>
+                        <th class="text-center">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% let total = 0; %>
+                    <% items.forEach(item => { %>
+                        <% total += (item.price * item.quantity); %>
+                        <tr>
+                            <td class="ps-3 fw-bold">x<%= item.quantity %></td>
+                            <td>
+                                <div><%= item.name %></div>
+                                <% if(item.comment) { %>
+                                    <small class="text-danger fw-bold"><%= item.comment %></small>
+                                <% } %>
+                            </td>
+                            <td>$<%= (item.price * item.quantity).toFixed(2) %></td>
+                            <td class="text-center">
+                                <%- item.enviado ? '<span class="badge bg-success status-badge">Enviado ✅</span>' : '<span class="badge bg-warning text-dark status-badge">Pendiente ⏳</span>' %>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-dark text-white d-flex justify-content-between align-items-center p-3">
+            <span class="h4 mb-0">TOTAL:</span>
+            <span class="h2 mb-0">$<%= total.toFixed(2) %></span>
+        </div>
+    </div>
+
+    <!-- BOTONES -->
+    <div class="row g-3 mb-5">
+        <div class="col-6">
+            <form action="/mesas/send-to-kitchen/<%= service.id %>" method="POST">
+                <button class="btn btn-warning btn-xl w-100 shadow-sm fw-bold">👨‍🍳 Enviar a Cocina</button>
+            </form>
+        </div>
+        <div class="col-6">
+            <button class="btn btn-success btn-xl w-100 shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">💰 Cerrar Cuenta</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CIERRE -->
+<div class="modal fade" id="closeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="/mesas/close/<%= service.id %>" method="POST" class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Finalizar Venta</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <input type="hidden" name="total" value="<%= total %>">
+                <span class="text-muted d-block">Monto a cobrar:</span>
+                <span class="display-4 fw-bold">$<%= total.toFixed(2) %></span>
+
+                <div class="mt-4 text-start">
+                    <label class="form-label fw-bold">Método de Pago:</label>
+                    <select name="payment_method" class="form-select form-select-lg" required>
+                        <option value="Efectivo">💵 Efectivo</option>
+                        <option value="Transferencia">📱 Transferencia</option>
+                        <option value="Tarjeta">💳 Tarjeta</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-success btn-lg px-4">Confirmar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function changeQty(val) {
+        const input = document.getElementById('qtyInput');
+        let current = parseInt(input.value);
+        if (current + val >= 1) {
+            input.value = current + val;
+        }
+    }
+</script>
+
+</body>
+</html>

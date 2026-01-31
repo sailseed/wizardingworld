@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monitor de Cocina</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+    body {
+        background-color: #1a1a1a;
+        color: white;
+        padding-bottom: 120px; /* Espacio para que el contador no tape nada */
+    }
+
+    .card-cocina {
+        min-height: 70vh;
+        border: 4px solid #444;
+        background-color: #222;
+        cursor: pointer; /* Indica que se puede hacer click */
+        transition: transform 0.1s, border-color 0.2s;
+    }
+
+    /* Efecto al tocar la tarjeta */
+    .card-cocina:active {
+        transform: scale(0.98);
+        border-color: #28a745;
+    }
+
+    .mesa-header { font-size: 2.5rem; font-weight: 900; background-color: #ffc107; color: black; padding: 10px; }
+
+    .item-name {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #ffffff;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    }
+
+    .item-comment { font-size: 1.5rem; color: #ff6666; font-style: italic; background: #331111; padding: 5px; display: block; border-radius: 5px; }
+    .qty-badge { font-size: 2.5rem; background: #fff; color: #000; padding: 0 15px; border-radius: 10px; margin-right: 15px; font-weight: 900; }
+
+    .queue-footer {
+        font-size: 2rem;
+        background: rgba(51, 51, 51, 0.95);
+        padding: 15px;
+        text-align: center;
+        color: #ffc107;
+        backdrop-filter: blur(5px); /* Se ve moderno y traslúcido */
+    }
+
+    /* Barra verde al final de la tarjeta en lugar de botón */
+    .card-ready-bar {
+        background-color: #28a745;
+        color: white;
+        text-align: center;
+        font-weight: bold;
+        padding: 10px;
+        font-size: 1.5rem;
+    }
+</style>
+
+</head>
+<body>
+    <div class="container-fluid mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="display-3 fw-bold">COCINA</h1>
+            <a href="/" class="btn btn-outline-light">Salir</a>
+        </div>
+
+<div class="row g-3" id="orders-grid">
+    <% displayTickets.forEach(ticket => { %>
+        <div class="col-12 col-md-6 col-lg-3">
+            <!-- TODA LA TARJETA ES CLICKABLE -->
+            <div class="card card-cocina shadow-lg h-100"
+                 onclick="confirmarPreparacion('<%= ticket.service_id %>', '<%= ticket.mesa_name %>')">
+
+                <div class="mesa-header text-center">
+                    <%= ticket.mesa_name %> <br>
+                    <span class="fs-4 fw-normal"><%= ticket.service_code %></span>
+                </div>
+
+                <div class="card-body">
+                    <ul class="list-unstyled">
+                        <% ticket.items.forEach(item => { %>
+                            <li class="mb-4 border-bottom border-secondary pb-3">
+                                <div class="d-flex align-items-center">
+                                    <span class="qty-badge"><%= item.quantity %></span>
+                                    <span class="item-name"><%= item.name %></span>
+                                </div>
+                                <% if(item.comment) { %>
+                                    <span class="item-comment mt-2">⚠️ <%= item.comment %></span>
+                                <% } %>
+                            </li>
+                        <% }) %>
+                    </ul>
+                </div>
+
+                <!-- Indicador visual al fondo de la tarjeta -->
+                <div class="card-ready-bar">
+                    TOCAR PARA TERMINAR
+                </div>
+            </div>
+        </div>
+    <% }) %>
+</div>
+
+            <% if (displayTickets.length === 0) { %>
+                <div class="col-12 text-center mt-5">
+                    <h2 class="display-1 text-muted">SIN PEDIDOS 🍔</h2>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmación -->
+    <div class="modal fade" id="confirmModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark border-light">
+                <div class="modal-body text-center p-5">
+                    <h2 class="mb-4">¿Mesa <span id="mesaNombreModal"></span> Preparada?</h2>
+                    <form id="formPreparar" method="POST">
+                        <button type="submit" class="btn btn-success btn-lg px-5 fs-1 fw-bold">¡SÍ, PREPARADA!</button>
+                        <button type="button" class="btn btn-link text-white mt-3 d-block w-100" data-bs-dismiss="modal">Aún no</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<div class="fixed-bottom queue-footer border-top border-warning" id="queue-container">
+    ÓRDENES EN ESPERA: <span class="badge bg-warning text-dark px-4" id="queue-count">
+        <%= queueCount %>
+    </span>
+</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        function confirmarPreparacion(id, nombre) {
+            document.getElementById('mesaNombreModal').innerText = nombre;
+            document.getElementById('formPreparar').action = '/cocina/preparar/' + id;
+            modal.show();
+        }
+    </script>
+
+    <script>
+    // Función para verificar actualizaciones
+    async function checkUpdates() {
+        // IMPORTANTE: Si hay un modal de confirmación abierto, NO actualizar.
+        // Esto evita que la pantalla cambie mientras el parrillero está confirmando.
+        const isModalOpen = document.querySelector('.modal.show');
+        if (isModalOpen) return;
+
+        try {
+            // Consultamos la misma página en segundo plano
+            const response = await fetch('/cocina');
+            const html = await response.text();
+
+            // Convertimos el texto recibido en HTML para manipularlo
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Extraemos solo el contenido de las órdenes y el contador
+            const newOrders = doc.querySelector('#orders-grid').innerHTML;
+            const newQueue = doc.querySelector('#queue-count').innerHTML;
+
+            // Actualizamos solo esas partes en la pantalla actual
+            // Solo si el contenido ha cambiado para ahorrar recursos
+            if (document.querySelector('#orders-grid').innerHTML !== newOrders) {
+                document.querySelector('#orders-grid').innerHTML = newOrders;
+            }
+            document.querySelector('#queue-count').innerHTML = newQueue;
+
+            console.log("Cocina actualizada automáticamente");
+        } catch (error) {
+            console.error("Error al actualizar cocina:", error);
+        }
+    }
+
+    // Ejecutar cada 5 segundos (5000 milisegundos)
+    setInterval(checkUpdates, 5000);
+</script>
+
+</body>
+</html>

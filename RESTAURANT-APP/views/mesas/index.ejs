@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mesas y Pedidos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        .service-link { text-decoration: none; display: block; padding: 10px; border-bottom: 1px solid #eee; color: #333; }
+        .service-link:hover { background-color: #f8f9fa; }
+        .btn-delete-table { padding: 0 5px; line-height: 1; font-size: 1.2rem; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container mt-4">
+        <!-- HEADER & ADD REGULAR TABLE -->
+        <div class="row align-items-center mb-4">
+            <div class="col-md-6"><h1>Mesas y Pedidos</h1></div>
+            <div class="col-md-6 text-end">
+                <form action="/mesas/add" method="POST" class="d-inline-flex border p-2 bg-white rounded shadow-sm">
+                    <input type="text" name="name" class="form-control form-control-sm me-2" placeholder="Nombre Mesa (Ej: 5)" required>
+                    <button class="btn btn-primary btn-sm">Agregar Mesa</button>
+                </form>
+                <a href="/" class="btn btn-outline-secondary btn-sm ms-2">Dashboard</a>
+            </div>
+        </div>
+
+        <!-- GRID -->
+        <div class="row g-3">
+            <% tables.forEach(table => { %>
+                <% // Movemos esto aquí arriba para usarlo en el header %>
+                <% const activeOnThisTable = services.filter(s => s.mesa_id === table.id); %>
+
+                <div class="col-12 col-md-6 col-lg-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <!-- BOTÓN ELIMINAR: Solo mesas regulares y vacías -->
+                                <% if (table.type === 'regular' && activeOnThisTable.length === 0) { %>
+                                    <form action="/mesas/delete/<%= table.id %>" method="POST" onsubmit="return confirm('¿Eliminar esta mesa?')">
+                                        <button class="btn btn-sm btn-outline-danger border-0 text-white btn-delete-table me-2" title="Eliminar Mesa">&times;</button>
+                                    </form>
+                                <% } %>
+                                <h5 class="mb-0">
+                                    <%= table.type === 'recoleccion' ? '🥡 Recolección' : table.type === 'envio' ? '🛵 Envíos' : '🪑 Mesa ' + table.name %>
+                                </h5>
+                            </div>
+
+                            <!-- ACTION BUTTONS -->
+                            <div class="d-flex align-items-center">
+                                <% if (table.type === 'envio') { %>
+                                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalEnvio">Nuevo</button>
+                                <% } else if (table.type === 'recoleccion') { %>
+                                    <form action="/mesas/open/<%= table.id %>" method="POST">
+                                        <button class="btn btn-sm btn-primary">Abrir</button>
+                                    </form>
+                                <% } else { %>
+                                    <% if (activeOnThisTable.length === 0) { %>
+                                        <form action="/mesas/open/<%= table.id %>" method="POST">
+                                            <button class="btn btn-sm btn-success">Abrir</button>
+                                        </form>
+                                    <% } %>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush">
+                                <% if (activeOnThisTable.length > 0) { %>
+                                    <% activeOnThisTable.forEach(s => { %>
+                                        <a href="/mesas/service/<%= s.id %>" class="service-link d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="fw-bold"><%= s.service_code %></span>
+                                                <% if(s.domicilio) { %><br><small class="text-muted text-uppercase"><%= s.domicilio %></small><% } %>
+                                            </div>
+                                            <span class="badge bg-danger">Ver Orden</span>
+                                        </a>
+                                    <% }) %>
+                                <% } else { %>
+                                    <div class="p-4 text-center text-muted small">Sin servicios activos</div>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    </div>
+
+    <!-- MODAL FOR ENVIO -->
+    <div class="modal fade" id="modalEnvio" tabindex="-1">
+        <div class="modal-dialog">
+            <% const envioTable = tables.find(t => t.type === 'envio'); %>
+            <form action="/mesas/open/<%= envioTable ? envioTable.id : '' %>" method="POST" class="modal-content">
+                <div class="modal-header"><h5>Nuevo Envío</h5></div>
+                <div class="modal-body">
+                    <label class="form-label">Domicilio:</label>
+                    <input type="text" name="domicilio" class="form-control" placeholder="Ej: Arrebol 24" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Abrir Cuenta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+const express = require('express');
+const router = express.Router();
+
+// 1. Home - List all tables
+router.get('/', (req, res) => {
+    req.db.all("SELECT * FROM mesas", [], (err, tables) => {
+        req.db.all("SELECT * FROM servicios WHERE status = 'active'", [], (err, services) => {
+            res.render('mesas/index', { tables, services });
+        });
+    });
+});
+
+// 2.a Add New Regular Table
+router.post('/add', (req, res) => {
+    req.db.run("INSERT INTO mesas (name, type) VALUES (?, 'regular')", [req.body.name], () => res.redirect('/mesas'));
+});
+
+// 2b Remove table
+router.post('/delete/:id', (req, res) => {
+    req.db.run("DELETE FROM mesas WHERE id = ? AND type = 'regular'", [req.params.id], (err) => {
+        res.redirect('/mesas');
+    });
+});
+
+// 3. Open Account (Abrir Cuenta)
+router.post('/open/:mesaId', (req, res) => {
+    const mesaId = req.params.mesaId;
+    const { domicilio } = req.body;
+
+    req.db.get("SELECT * FROM mesas WHERE id = ?", [mesaId], (err, mesa) => {
+        let codePrefix = "#M";
+        let customCode = null;
+
+        if (mesa.type === 'recoleccion') codePrefix = "#R";
+        if (mesa.type === 'envio') customCode = "#" + domicilio.replace(/\s+/g, '');
+
+        if (customCode) {
+            req.db.run("INSERT INTO servicios (service_code, mesa_id, status, domicilio) VALUES (?, ?, 'active', ?)",
+                       [customCode, mesaId, domicilio], () => res.redirect('/mesas'));
+        } else {
+            req.db.get("SELECT COUNT(*) as count FROM servicios WHERE service_code LIKE ?", [codePrefix + '%'], (err, row) => {
+                const service_code = codePrefix + String(row.count + 1).padStart(4, '0');
+                req.db.run("INSERT INTO servicios (service_code, mesa_id, status) VALUES (?, ?, 'active')",
+                           [service_code, mesaId], () => res.redirect('/mesas'));
+            });
+        }
+    });
+});
+
+// 4. View Service (The Order Page)
+router.get('/service/:id', (req, res) => {
+    const serviceId = req.params.id;
+    req.db.get("SELECT servicios.*, mesas.name as mesa_name FROM servicios JOIN mesas ON servicios.mesa_id = mesas.id WHERE servicios.id = ?", [serviceId], (err, service) => {
+        req.db.all("SELECT * FROM pedidos WHERE service_id = ?", [serviceId], (err, items) => {
+            req.db.all("SELECT * FROM menu", (err, menu) => {
+                res.render('mesas/order', { service, items, menu });
+            });
+        });
+    });
+});
+
+// RUTA CORREGIDA: Toggle Pagado
+router.post('/service/:id/toggle-pagado', (req, res) => {
+    const newVal = req.body.pagado ? 1 : 0;
+    const serviceId = req.params.id;
+
+    req.db.run("UPDATE servicios SET pagado = ? WHERE id = ?", [newVal, serviceId], (err) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).send("Error en la base de datos");
+        }
+        res.redirect(`/mesas/service/${serviceId}`);
+    });
+});
+
+// 5. Add Item to Order
+router.post('/add-item/:serviceId', (req, res) => {
+    const { menu_item_id, quantity, comment } = req.body;
+    req.db.get("SELECT * FROM menu WHERE id = ?", [menu_item_id], (err, item) => {
+        req.db.run("INSERT INTO pedidos (service_id, menu_item_id, name, price, quantity, comment) VALUES (?, ?, ?, ?, ?, ?)",
+                   [req.params.serviceId, item.id, item.name, item.price, quantity, comment], () => {
+                       res.redirect('/mesas/service/' + req.params.serviceId);
+                   });
+    });
+});
+
+// 6. Enviar a Cocina
+router.post('/send-to-kitchen/:serviceId', (req, res) => {
+    req.db.run("UPDATE pedidos SET enviado = 1 WHERE service_id = ? AND enviado = 0", [req.params.serviceId], () => {
+        res.redirect('/mesas/service/' + req.params.serviceId);
+    });
+});
+
+// 7. Cerrar Cuenta (Finalize)
+
+router.post('/close/:serviceId', (req, res) => {
+    const { payment_method, total } = req.body;
+
+    // TIMESTAMP LOCAL
+    const now = new Date();
+    const ts = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + " " + String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
+
+    req.db.get("SELECT id FROM sesiones WHERE status = 'open'", (err, session) => {
+        const sId = session ? session.id : 'NA';
+        req.db.run("UPDATE servicios SET status = 'closed', payment_method = ?, total = ?, timestamp = ?, session_id = ? WHERE id = ?",
+                   [payment_method, total, ts, sId, req.params.serviceId], () => {
+                       res.redirect('/mesas');
+                   });
+    });
+});
+
+module.exports = router;
