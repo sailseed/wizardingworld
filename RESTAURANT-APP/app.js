@@ -8,7 +8,6 @@ const session = require('express-session');
 const app = express();
 const db = new sqlite3.Database('./restaurant.db');
 
-
 // Middleware
 app.use(session({
     secret: 'secret-key-restaurant',
@@ -19,6 +18,7 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
 
 // Initialize Database Tables
 db.serialize(() => {

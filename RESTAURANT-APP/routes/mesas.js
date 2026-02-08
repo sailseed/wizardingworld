@@ -1,4 +1,5 @@
 const express = require('express');
+const { imprimirTicket, imprimirReciboCliente } = require('../utils/printer');
 const router = express.Router();
 
 // 1. Home - List all tables
@@ -86,26 +87,88 @@ router.post('/add-item/:serviceId', (req, res) => {
 
 // 6. Enviar a Cocina
 router.post('/send-to-kitchen/:serviceId', (req, res) => {
-    req.db.run("UPDATE pedidos SET enviado = 1 WHERE service_id = ? AND enviado = 0", [req.params.serviceId], () => {
-        res.redirect('/mesas/service/' + req.params.serviceId);
+    const serviceId = req.params.serviceId;
+    const now = Date.now();
+
+    // Primero obtenemos la información del servicio y los items que se van a enviar
+    const queryService = `
+    SELECT s.*, m.name as mesa_name, m.type as mesa_type
+    FROM servicios s
+    JOIN mesas m ON s.mesa_id = m.id
+    WHERE s.id = ?`;
+
+    const queryItems = "SELECT * FROM pedidos WHERE service_id = ? AND enviado = 0";
+
+    req.db.get(queryService, [serviceId], (err, servicio) => {
+        req.db.all(queryItems, [serviceId], (err, items) => {
+
+            if (items.length > 0) {
+                // SI ES ENVÍO O RECOLECCIÓN, MANDAR A IMPRIMIR
+                if (servicio.mesa_type === 'envio' || servicio.mesa_type === 'recoleccion') {
+                    imprimirTicket(servicio, items);
+                }
+
+                // Marcar como enviado en la DB para la cocina
+                req.db.run("UPDATE pedidos SET enviado = 1, kitchen_time = ? WHERE service_id = ? AND enviado = 0",
+                           [now, serviceId], () => {
+                               res.redirect('/mesas/service/' + serviceId);
+                           });
+            } else {
+                res.redirect('/mesas/service/' + serviceId);
+            }
+        });
     });
 });
 
-// 7. Cerrar Cuenta (Finalize)
-
+// 7. Cerrar Cuenta (Finalize) y Imprimir Recibo
 router.post('/close/:serviceId', (req, res) => {
+    const serviceId = req.params.serviceId;
     const { payment_method, total } = req.body;
 
-    // TIMESTAMP LOCAL
     const now = new Date();
-    const ts = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + " " + String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
+    const ts = now.getFullYear() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + " " +
+    String(now.getHours()).padStart(2, '0') + ":" +
+    String(now.getMinutes()).padStart(2, '0');
 
-    req.db.get("SELECT id FROM sesiones WHERE status = 'open'", (err, session) => {
-        const sId = session ? session.id : 'NA';
-        req.db.run("UPDATE servicios SET status = 'closed', payment_method = ?, total = ?, timestamp = ?, session_id = ? WHERE id = ?",
-                   [payment_method, total, ts, sId, req.params.serviceId], () => {
-                       res.redirect('/mesas');
-                   });
+    console.log(`Intentando cerrar servicio ID: ${serviceId}`);
+
+    // 1. Obtenemos información de la mesa
+    req.db.get("SELECT s.*, m.name as mesa_name FROM servicios s JOIN mesas m ON s.mesa_id = m.id WHERE s.id = ?", [serviceId], (err, servicio) => {
+        if (err) return console.error("Error al obtener servicio:", err);
+
+        // 2. Obtenemos pedidos para el ticket
+        req.db.all("SELECT * FROM pedidos WHERE service_id = ?", [serviceId], (err, items) => {
+            if (err) return console.error("Error al obtener items:", err);
+
+            // 3. Buscamos sesión de cierre activa
+            req.db.get("SELECT id FROM sesiones WHERE status = 'open'", (err, session) => {
+                const sId = session ? session.id : 'NA';
+
+                // 4. Mandamos a imprimir
+                try {
+                    const datosParaTicket = { ...servicio, payment_method, total };
+                    imprimirReciboCliente(datosParaTicket, items);
+                } catch (printErr) {
+                    console.error("Error al imprimir, pero continuaremos con el cierre:", printErr);
+                }
+
+                // 5. Cerramos en la base de datos
+                const sql = "UPDATE servicios SET status = 'closed', payment_method = ?, total = ?, timestamp = ?, session_id = ? WHERE id = ?";
+                const params = [payment_method, total, ts, sId, serviceId];
+
+                req.db.run(sql, params, function(err) {
+                    if (err) {
+                        console.error("ERROR CRÍTICO AL ACTUALIZAR DB:", err.message);
+                        return res.status(500).send("Error al cerrar la cuenta en la base de datos: " + err.message);
+                    }
+
+                    console.log(`Servicio ${serviceId} cerrado con éxito. Filas afectadas: ${this.changes}`);
+                    res.redirect('/mesas');
+                });
+            });
+        });
     });
 });
 

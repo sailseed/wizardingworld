@@ -27,6 +27,7 @@ router.get('/', (req, res) => {
                     service_code: row.service_code,
                     mesa_name: row.mesa_name,
                     first_item_id: row.id, // Para ordenar por antigüedad
+                    startTime: row.kitchen_time, // Guardamos el tiempo de entrada
                     items: []
                 };
             }
