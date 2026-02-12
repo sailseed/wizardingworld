@@ -56,28 +56,23 @@
         <div class="card-body">
             <form action="/mesas/add-item/<%= service.id %>" method="POST" class="row g-3 align-items-end">
                 <div class="col-12 col-md-4">
-                    <label class="form-label small fw-bold">Buscar por código o nombre</label>
+                    <label class="form-label small fw-bold">Producto (código o nombre)</label>
                     <input
                         type="text"
-                        id="productSearch"
-                        class="form-control form-control-lg mb-2"
+                        id="productCombo"
+                        class="form-control form-control-lg"
                         list="menuSuggestions"
                         placeholder="Ej: HA o Hamburguesa"
                         autocomplete="off"
+                        required
                     >
+                    <input type="hidden" name="menu_item_id" id="menuItemId" required>
                     <datalist id="menuSuggestions">
                         <% menu.forEach(m => { %>
-                            <option value="<%= (m.code || '').toUpperCase() %>"><%= m.name %></option>
-                            <option value="<%= m.name %>"><%= (m.code || '').toUpperCase() %></option>
+                            <option value="<%= (m.code || '').toUpperCase() %> - <%= m.name %>"></option>
+                            <option value="<%= m.name %> - <%= (m.code || '').toUpperCase() %>"></option>
                         <% }) %>
                     </datalist>
-
-                    <select name="menu_item_id" id="menuSelect" class="form-select form-select-lg" required>
-                        <option value="">Seleccionar...</option>
-                        <% menu.forEach(m => { %>
-                            <option value="<%= m.id %>" data-code="<%= (m.code || '').toUpperCase() %>" data-name="<%= m.name.toUpperCase() %>">[<%= m.code %>] <%= m.name %> - $<%= m.price %></option>
-                        <% }) %>
-                    </select>
                 </div>
 
                 <div class="col-6 col-md-3">
@@ -235,48 +230,54 @@
         }
     }
 
-    const productSearchInput = document.getElementById('productSearch');
-    const menuSelect = document.getElementById('menuSelect');
+    const productComboInput = document.getElementById('productCombo');
+    const menuItemIdInput = document.getElementById('menuItemId');
+    const addItemForm = document.querySelector('form[action^="/mesas/add-item/"]');
+
+    const menuCatalog = [
+        <% menu.forEach((m, idx) => { %>
+            {
+                id: "<%= m.id %>",
+                code: "<%= (m.code || '').toUpperCase() %>",
+                name: "<%= m.name %>",
+                nameUpper: "<%= m.name.toUpperCase() %>"
+            }<%= idx < menu.length - 1 ? ',' : '' %>
+        <% }) %>
+    ];
 
     function normalizeText(value) {
         return (value || '').trim().toUpperCase();
     }
 
-    function filterMenuOptions() {
-        const term = normalizeText(productSearchInput.value);
-        let matchedFirst = false;
+    function resolveProduct(text) {
+        const term = normalizeText(text);
+        if (!term) return null;
 
-        Array.from(menuSelect.options).forEach((option, index) => {
-            if (index === 0) {
-                option.hidden = false;
+        return menuCatalog.find((item) => item.code === term) ||
+            menuCatalog.find((item) => item.nameUpper === term) ||
+            menuCatalog.find((item) => (`${item.code} - ${item.nameUpper}` === term)) ||
+            menuCatalog.find((item) => (`${item.nameUpper} - ${item.code}` === term));
+    }
+
+    if (productComboInput && menuItemIdInput && addItemForm) {
+        productComboInput.addEventListener('input', () => {
+            const match = resolveProduct(productComboInput.value);
+            menuItemIdInput.value = match ? match.id : '';
+        });
+
+        addItemForm.addEventListener('submit', (event) => {
+            const match = resolveProduct(productComboInput.value);
+            if (!match) {
+                event.preventDefault();
+                menuItemIdInput.value = '';
+                productComboInput.setCustomValidity('Selecciona un producto válido por código o nombre.');
+                productComboInput.reportValidity();
                 return;
             }
 
-            const code = normalizeText(option.dataset.code);
-            const name = normalizeText(option.dataset.name);
-            const matches = !term || code.includes(term) || name.includes(term);
-
-            option.hidden = !matches;
-
-            if (matches && !matchedFirst && term) {
-                menuSelect.value = option.value;
-                matchedFirst = true;
-            }
-        });
-
-        if (!term) {
-            menuSelect.value = '';
-        }
-    }
-
-    if (productSearchInput && menuSelect) {
-        productSearchInput.addEventListener('input', filterMenuOptions);
-        productSearchInput.addEventListener('change', filterMenuOptions);
-
-        menuSelect.addEventListener('change', () => {
-            const selectedOption = menuSelect.options[menuSelect.selectedIndex];
-            if (!selectedOption || !selectedOption.dataset) return;
-            productSearchInput.value = selectedOption.dataset.code || selectedOption.dataset.name || '';
+            productComboInput.setCustomValidity('');
+            menuItemIdInput.value = match.id;
+            productComboInput.value = `${match.code} - ${match.name}`;
         });
     }
 </script>
