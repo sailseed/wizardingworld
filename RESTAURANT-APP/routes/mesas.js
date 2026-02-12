@@ -136,6 +136,10 @@ router.post('/print-receipt/:serviceId', (req, res) => {
                 return res.redirect('/mesas/service/' + serviceId);
             }
 
+            if (servicio.mesa_type !== 'regular') {
+                return res.redirect('/mesas/service/' + serviceId);
+            }
+
             try {
                 imprimirReciboCliente(servicio, items);
             } catch (printErr) {
