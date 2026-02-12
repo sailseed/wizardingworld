@@ -59,8 +59,25 @@ db.serialize(() => {
         payment_method TEXT,
         timestamp TEXT,
         domicilio TEXT,
-        pagado INTEGER DEFAULT 0
+        pagado INTEGER DEFAULT 0,
+        customer_ticket_printed INTEGER DEFAULT 0
     )`);
+
+    db.all("PRAGMA table_info(servicios)", (err, columns) => {
+        if (err) {
+            return console.error("Error leyendo columnas de servicios:", err.message);
+        }
+
+        const hasPrintedColumn = columns.some((column) => column.name === 'customer_ticket_printed');
+        if (!hasPrintedColumn) {
+            db.run("ALTER TABLE servicios ADD COLUMN customer_ticket_printed INTEGER DEFAULT 0", (alterErr) => {
+                if (alterErr) {
+                    return console.error("Error agregando customer_ticket_printed:", alterErr.message);
+                }
+                console.log("Columna customer_ticket_printed agregada a servicios.");
+            });
+        }
+    });
 
     // 5. Tabla de Pedidos (Los productos dentro de cada cuenta)
     db.run(`CREATE TABLE IF NOT EXISTS pedidos (

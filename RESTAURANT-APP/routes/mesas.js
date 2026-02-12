@@ -51,10 +51,10 @@ router.post('/open/:mesaId', (req, res) => {
 // 4. View Service (The Order Page)
 router.get('/service/:id', (req, res) => {
     const serviceId = req.params.id;
-    req.db.get("SELECT servicios.*, mesas.name as mesa_name FROM servicios JOIN mesas ON servicios.mesa_id = mesas.id WHERE servicios.id = ?", [serviceId], (err, service) => {
+    req.db.get("SELECT servicios.*, mesas.name as mesa_name, mesas.type as mesa_type FROM servicios JOIN mesas ON servicios.mesa_id = mesas.id WHERE servicios.id = ?", [serviceId], (err, service) => {
         req.db.all("SELECT * FROM pedidos WHERE service_id = ?", [serviceId], (err, items) => {
             req.db.all("SELECT * FROM menu", (err, menu) => {
-                res.render('mesas/order', { service, items, menu });
+                res.render('mesas/order', { service, items, menu, printRequired: req.query.printRequired === '1' });
             });
         });
     });
@@ -120,6 +120,38 @@ router.post('/send-to-kitchen/:serviceId', (req, res) => {
     });
 });
 
+// 6.b Imprimir recibo antes de elegir método de pago
+router.post('/print-receipt/:serviceId', (req, res) => {
+    const serviceId = req.params.serviceId;
+
+    req.db.get("SELECT s.*, m.name as mesa_name, m.type as mesa_type FROM servicios s JOIN mesas m ON s.mesa_id = m.id WHERE s.id = ?", [serviceId], (err, servicio) => {
+        if (err || !servicio) {
+            console.error("Error al obtener servicio para imprimir:", err);
+            return res.redirect('/mesas/service/' + serviceId);
+        }
+
+        req.db.all("SELECT * FROM pedidos WHERE service_id = ?", [serviceId], (itemsErr, items) => {
+            if (itemsErr) {
+                console.error("Error al obtener items para imprimir:", itemsErr);
+                return res.redirect('/mesas/service/' + serviceId);
+            }
+
+            try {
+                imprimirReciboCliente(servicio, items);
+            } catch (printErr) {
+                console.error("Error al imprimir recibo preliminar:", printErr);
+            }
+
+            req.db.run("UPDATE servicios SET customer_ticket_printed = 1 WHERE id = ?", [serviceId], (updateErr) => {
+                if (updateErr) {
+                    console.error("Error marcando ticket impreso:", updateErr.message);
+                }
+                res.redirect('/mesas/service/' + serviceId);
+            });
+        });
+    });
+});
+
 // 7. Cerrar Cuenta (Finalize) y Imprimir Recibo
 router.post('/close/:serviceId', (req, res) => {
     const serviceId = req.params.serviceId;
@@ -135,8 +167,17 @@ router.post('/close/:serviceId', (req, res) => {
     console.log(`Intentando cerrar servicio ID: ${serviceId}`);
 
     // 1. Obtenemos información de la mesa
-    req.db.get("SELECT s.*, m.name as mesa_name FROM servicios s JOIN mesas m ON s.mesa_id = m.id WHERE s.id = ?", [serviceId], (err, servicio) => {
+    req.db.get("SELECT s.*, m.name as mesa_name, m.type as mesa_type FROM servicios s JOIN mesas m ON s.mesa_id = m.id WHERE s.id = ?", [serviceId], (err, servicio) => {
         if (err) return console.error("Error al obtener servicio:", err);
+
+        if (!servicio) {
+            return res.redirect('/mesas/service/' + serviceId + '?printRequired=1');
+        }
+
+        const requiresPrintedTicket = servicio.mesa_type === 'regular';
+        if (requiresPrintedTicket && servicio.customer_ticket_printed !== 1) {
+            return res.redirect('/mesas/service/' + serviceId + '?printRequired=1');
+        }
 
         // 2. Obtenemos pedidos para el ticket
         req.db.all("SELECT * FROM pedidos WHERE service_id = ?", [serviceId], (err, items) => {
@@ -146,15 +187,7 @@ router.post('/close/:serviceId', (req, res) => {
             req.db.get("SELECT id FROM sesiones WHERE status = 'open'", (err, session) => {
                 const sId = session ? session.id : 'NA';
 
-                // 4. Mandamos a imprimir
-                try {
-                    const datosParaTicket = { ...servicio, payment_method, total };
-                    imprimirReciboCliente(datosParaTicket, items);
-                } catch (printErr) {
-                    console.error("Error al imprimir, pero continuaremos con el cierre:", printErr);
-                }
-
-                // 5. Cerramos en la base de datos
+                // 4. Cerramos en la base de datos
                 const sql = "UPDATE servicios SET status = 'closed', payment_method = ?, total = ?, timestamp = ?, session_id = ? WHERE id = ?";
                 const params = [payment_method, total, ts, sId, serviceId];
 

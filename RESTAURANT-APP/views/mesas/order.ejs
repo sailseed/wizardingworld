@@ -43,6 +43,13 @@
         </div>
     <% } %>
 
+    <% const requiresCustomerPrint = service.mesa_type === 'regular'; %>
+    <% if (requiresCustomerPrint && (!service.customer_ticket_printed || printRequired)) { %>
+        <div class="alert alert-warning text-center fw-bold shadow-sm">
+            🧾 Debes imprimir el ticket del cliente antes de registrar el pago.
+        </div>
+    <% } %>
+
     <!-- AGREGAR PRODUCTO -->
     <div class="card mb-4 border-0 shadow-sm">
         <div class="card-header bg-primary text-white fw-bold">Agregar Producto</div>
@@ -120,13 +127,24 @@
 
     <!-- BOTONES -->
     <div class="row g-3 mb-5">
-        <div class="col-6">
+        <div class="col-12 col-md-4">
             <form action="/mesas/send-to-kitchen/<%= service.id %>" method="POST">
                 <button class="btn btn-warning btn-xl w-100 shadow-sm fw-bold">👨‍🍳 Enviar a Cocina</button>
             </form>
         </div>
-        <div class="col-6">
-            <button class="btn btn-success btn-xl w-100 shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">💰 Cerrar Cuenta</button>
+        <div class="col-12 col-md-4">
+            <form action="/mesas/print-receipt/<%= service.id %>" method="POST">
+                <button class="btn btn-info btn-xl w-100 shadow-sm fw-bold">🖨️ Imprimir Ticket</button>
+            </form>
+        </div>
+        <div class="col-12 col-md-4">
+            <% const canCloseService = !requiresCustomerPrint || service.customer_ticket_printed === 1; %>
+            <button
+                class="btn btn-success btn-xl w-100 shadow-sm fw-bold"
+                data-bs-toggle="modal"
+                data-bs-target="#closeModal"
+                <%= canCloseService ? '' : 'disabled title="Primero imprime el ticket del cliente"' %>
+            >💰 Registrar Pago</button>
         </div>
     </div>
 </div>
